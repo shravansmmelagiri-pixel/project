@@ -24,6 +24,15 @@ function App() {
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [equalizerActive, setEqualizerActive] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'debate' | 'history' | 'analytics' | 'settings'>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [stats] = useState({
+    totalDebates: 48,
+    winRate: 72,
+    averageScore: 8.3,
+    weakAreas: 'Logic Structure'
+  });
   const synth = window.speechSynthesis;
 
   // Check if user is logged in on app load
@@ -42,6 +51,36 @@ function App() {
         localStorage.removeItem('token');
       });
     }
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const x = ((event.clientX / window.innerWidth) - 0.5) * 28;
+      const y = ((event.clientY / window.innerHeight) - 0.5) * 28;
+      document.documentElement.style.setProperty('--cursor-x', `${x}px`);
+      document.documentElement.style.setProperty('--cursor-y', `${y}px`);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Activate equalizer on user interactions
+  useEffect(() => {
+    const activateEqualizer = () => {
+      setEqualizerActive(true);
+      setTimeout(() => setEqualizerActive(false), 2000);
+    };
+
+    const handleInteraction = () => activateEqualizer();
+    
+    window.addEventListener('click', handleInteraction);
+    window.addEventListener('keydown', handleInteraction);
+    
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
   }, []);
 
   // initialize speech recognition
@@ -444,84 +483,112 @@ function App() {
   //ui
   if (!isLoggedIn) {
     return (
-      <div className="auth-page">
-        <div className="auth-card">
-          <div className="auth-side-panel">
-            <div className="auth-brand">
-              <span className="logo">AI DEBATE COACH</span>
+      <div className="auth-container">
+        <div className="auth-grid-bg"></div>
+        <div className="auth-flowing-lines"></div>
+        
+        <div className="auth-layout">
+          <div className="auth-left-panel">
+            <div className="neural-network">
+              <div className="network-node node-1"></div>
+              <div className="network-node node-2"></div>
+              <div className="network-node node-3"></div>
+              <div className="network-node node-4"></div>
+              <div className="network-line line-1"></div>
+              <div className="network-line line-2"></div>
+              <div className="network-line line-3"></div>
             </div>
-            <div className="auth-hero-copy">
-              <h2>Sharpen your arguments.</h2>
-              <p>Practice smarter debates, get instant AI feedback, and build confidence in every conversation.</p>
-            </div>
-            <div className="auth-footer-copy">
-              <p>Build your debate skills with real-time coaching and guided improvement.</p>
+            <div className="auth-left-content">
+              <h1 className="auth-main-title">AI DEBATE COACH</h1>
+              <p className="auth-tagline">Master the Art of Debate with AI</p>
+              <p className="auth-description">Experience intelligent debate coaching with real-time feedback and strategic insights.</p>
             </div>
           </div>
 
-          <div className="auth-form-panel">
-            <div className="auth-panel-header">
-              <div>
-                <h1>{authMode === 'register' ? 'Create an account' : 'Welcome back'}</h1>
-                <p>{authMode === 'register' ? 'Get started with your AI Debate Coach.' : 'Log in to continue your practice.'}</p>
+          <div className="auth-right-panel">
+            <div className="auth-glass-card">
+              <div className="auth-header">
+                <h2>{authMode === 'register' ? 'Create Account' : 'Welcome Back'}</h2>
+                <p>{authMode === 'register' ? 'Start your debate journey' : 'Continue practicing'}</p>
               </div>
-            </div>
-            <div className="auth-toggle">
-              <button className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')} type="button">Create account</button>
-              <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')} type="button">Log in</button>
-            </div>
 
-            {authMode === 'register' ? (
-              <form className="auth-form" onSubmit={handleRegister}>
-                <input
-                  type="text"
-                  placeholder="Username"
-                  value={registerForm.username}
-                  onChange={e => setRegisterForm({...registerForm, username: e.target.value})}
-                  required
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={registerForm.email}
-                  onChange={e => setRegisterForm({...registerForm, email: e.target.value})}
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Enter your password"
-                  value={registerForm.password}
-                  onChange={e => setRegisterForm({...registerForm, password: e.target.value})}
-                  required
-                />
-                <button type="submit" className="auth-submit">Create account</button>
-                <p className="auth-switch-text">Already have an account? <button type="button" className="link-button" onClick={() => setAuthMode('login')}>Log in</button></p>
-              </form>
-            ) : (
-              <form className="auth-form" onSubmit={handleLogin}>
-                <input
-                  type="text"
-                  placeholder="Username"
-                  value={loginForm.username}
-                  onChange={e => setLoginForm({...loginForm, username: e.target.value})}
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Enter your password"
-                  value={loginForm.password}
-                  onChange={e => setLoginForm({...loginForm, password: e.target.value})}
-                  required
-                />
-                <button type="submit" className="auth-submit">Login</button>
-                <p className="auth-switch-text">New here? <button type="button" className="link-button" onClick={() => setAuthMode('register')}>Create account</button></p>
-              </form>
-            )}
+              <div className="auth-mode-toggle">
+                <button 
+                  className={authMode === 'register' ? 'active' : ''} 
+                  onClick={() => setAuthMode('register')}
+                  type="button"
+                >
+                  Register
+                </button>
+                <button 
+                  className={authMode === 'login' ? 'active' : ''} 
+                  onClick={() => setAuthMode('login')}
+                  type="button"
+                >
+                  Login
+                </button>
+              </div>
 
-            <div className="auth-divider">Or register with</div>
-            <div className="auth-social-buttons">
-              <button type="button" className="social-button google">Google</button>
-              <button type="button" className="social-button apple">Apple</button>
+              {authMode === 'register' ? (
+                <form className="auth-form" onSubmit={handleRegister}>
+                  <div className="form-group">
+                    <input
+                      type="text"
+                      placeholder="Username"
+                      value={registerForm.username}
+                      onChange={e => setRegisterForm({...registerForm, username: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      type="email"
+                      placeholder="Email address"
+                      value={registerForm.email}
+                      onChange={e => setRegisterForm({...registerForm, email: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      type="password"
+                      placeholder="Password"
+                      value={registerForm.password}
+                      onChange={e => setRegisterForm({...registerForm, password: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="auth-submit-btn">Create Account</button>
+                </form>
+              ) : (
+                <form className="auth-form" onSubmit={handleLogin}>
+                  <div className="form-group">
+                    <input
+                      type="text"
+                      placeholder="Username"
+                      value={loginForm.username}
+                      onChange={e => setLoginForm({...loginForm, username: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <input
+                      type="password"
+                      placeholder="Password"
+                      value={loginForm.password}
+                      onChange={e => setLoginForm({...loginForm, password: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="auth-submit-btn">Sign In</button>
+                </form>
+              )}
+
+              <div className="auth-divider"></div>
+              <div className="social-login">
+                <button type="button" className="social-btn google">Google</button>
+                <button type="button" className="social-btn apple">Apple</button>
+              </div>
             </div>
           </div>
         </div>
@@ -529,141 +596,270 @@ function App() {
     );
   }
 
-  return (
-    <div className="App">
-      <h1>AI DEBATE COACH</h1>
-      <h3>The AI Powered Debate Assistant.</h3>
-
-      {/* Authentication Section */}
-      <div className="auth-section">
-        <div className="user-info">
-          <span>Welcome, {currentUser?.username}!</span>
-          <button onClick={loadSearchHistory}>View History</button>
-          <button onClick={handleLogout}>Logout</button>
-        </div>
+  // Dashboard Page
+  const renderDashboard = () => (
+    <div className="dashboard-container">
+      <div className="dashboard-header">
+        <h1 className="dashboard-title">Dashboard</h1>
+        <p className="dashboard-subtitle">Welcome back, {currentUser?.username}!</p>
       </div>
 
-      {showHistory && (
-        <div className="modal-overlay" onClick={() => setShowHistory(false)}>
-          <div className="modal history-modal" onClick={e => e.stopPropagation()}>
-            <h2>Search History</h2>
-            <div className="history-list">
-              {searchHistory.length === 0 ? (
-                <p>No search history found.</p>
-              ) : (
-                searchHistory.map((item: any) => (
-                  <div key={item.id} className="history-item">
-                    <h3>{item.topic}</h3>
-                    <p><strong>Your Argument:</strong> {item.transcription}</p>
-                    <p><strong>AI Response:</strong> {item.rebuttal}</p>
-                    <small>{new Date(item.created_at).toLocaleString()}</small>
-                  </div>
-                ))
-              )}
-            </div>
-            <button onClick={() => setShowHistory(false)}>Close</button>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon">📊</div>
+          <div className="stat-content">
+            <p className="stat-label">Total Debates</p>
+            <p className="stat-value">{stats.totalDebates}</p>
           </div>
         </div>
-      )}
-
-      <div className="input-group">
-        <input
-          type="text"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder="Enter debate topic"
-          disabled={isRecording}
-        />
-        {!isRecording ? (
-          <button 
-            onClick={handleStartRecording}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Processing...' : 'Start Debate'}
-          </button>
-        ) : (
-          <button 
-            onClick={handleStopRecording}
-            className="recording"
-          >
-            Stop Recording
-          </button>
-        )}
+        <div className="stat-card">
+          <div className="stat-icon">🎯</div>
+          <div className="stat-content">
+            <p className="stat-label">Win Rate</p>
+            <p className="stat-value">{stats.winRate}%</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">⭐</div>
+          <div className="stat-content">
+            <p className="stat-label">Avg Score</p>
+            <p className="stat-value">{stats.averageScore}/10</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">⚠️</div>
+          <div className="stat-content">
+            <p className="stat-label">Weak Area</p>
+            <p className="stat-value">{stats.weakAreas}</p>
+          </div>
+        </div>
       </div>
 
-      {isRecording && (
-        <div className="recording-status">
-          <p>Recording in progress... Speak your argument</p>
-          {liveTranscription && (
-            <div className="live-transcription">
-              <h3>Live Transcription:</h3>
-              <p>{liveTranscription}</p>
+      <div className="action-buttons-grid">
+        <button className="action-button primary" onClick={handleStartRecording}>
+          <span className="button-icon">▶️</span>
+          <span className="button-text">Start Debate</span>
+        </button>
+        <button className="action-button secondary">
+          <span className="button-icon">🎓</span>
+          <span className="button-text">Practice Mode</span>
+        </button>
+        <button className="action-button secondary">
+          <span className="button-icon">💡</span>
+          <span className="button-text">AI Feedback</span>
+        </button>
+      </div>
+
+      <div className="recent-debates">
+        <h2 className="section-title">Recent Debates</h2>
+        <div className="debates-list">
+          <div className="debate-item">
+            <div className="debate-header">
+              <h3 className="debate-topic">Climate Change Policy</h3>
+              <span className="debate-date">2 days ago</span>
+            </div>
+            <div className="debate-stats">
+              <span className="debate-score">Score: 8.5/10</span>
+              <span className="debate-duration">Duration: 12m</span>
+            </div>
+          </div>
+          <div className="debate-item">
+            <div className="debate-header">
+              <h3 className="debate-topic">Technology Impact</h3>
+              <span className="debate-date">1 week ago</span>
+            </div>
+            <div className="debate-stats">
+              <span className="debate-score">Score: 7.8/10</span>
+              <span className="debate-duration">Duration: 10m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Main Dashboard with Sidebar
+  return (
+    <div className="app-container">
+      <div className="app-grid-bg"></div>
+      <div className="app-flowing-lines"></div>
+
+      <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-logo">AI COACH</div>
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            ☰
+          </button>
+        </div>
+        <nav className="sidebar-nav">
+          <button className={`nav-item ${currentPage === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentPage('dashboard')}>
+            <span className="nav-icon">📊</span>
+            <span className="nav-text">Dashboard</span>
+          </button>
+          <button className={`nav-item ${currentPage === 'debate' ? 'active' : ''}`} onClick={() => setCurrentPage('debate')}>
+            <span className="nav-icon">🎙️</span>
+            <span className="nav-text">Start Debate</span>
+          </button>
+          <button className={`nav-item ${currentPage === 'history' ? 'active' : ''}`} onClick={() => setCurrentPage('history')}>
+            <span className="nav-icon">📜</span>
+            <span className="nav-text">History</span>
+          </button>
+          <button className={`nav-item ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => setCurrentPage('analytics')}>
+            <span className="nav-icon">📈</span>
+            <span className="nav-text">Analytics</span>
+          </button>
+          <button className={`nav-item ${currentPage === 'settings' ? 'active' : ''}`} onClick={() => setCurrentPage('settings')}>
+            <span className="nav-icon">⚙️</span>
+            <span className="nav-text">Settings</span>
+          </button>
+        </nav>
+        <button className="logout-btn" onClick={handleLogout}>
+          <span className="nav-icon">🚪</span>
+          <span className="nav-text">Logout</span>
+        </button>
+      </aside>
+
+      <main className="main-content">
+        <div className="content-wrapper">
+          {currentPage === 'dashboard' && renderDashboard()}
+          
+          {currentPage === 'debate' && (
+        <div className="debate-section">
+          <div className="debate-top-bar">
+            <div className="debate-topic-display">{topic || 'Enter a debate topic'}</div>
+            <div className="debate-timer">12:34</div>
+          </div>
+
+          <div className="ai-avatar-section">
+            <div className="ai-avatar">
+              <div className="avatar-glow"></div>
+              <div className="avatar-core"></div>
+              <div className="hologram-flicker"></div>
+            </div>
+            <div className={`volume-equalizer ${equalizerActive ? 'active' : ''}`}>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+              <div className="eq-bar"></div>
+            </div>
+          </div>
+
+          <div className="debate-input-section">
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="Enter debate topic"
+              disabled={isRecording}
+              className="debate-topic-input"
+            />
+            {!isRecording ? (
+              <button 
+                onClick={handleStartRecording}
+                disabled={isLoading}
+                className="debate-start-btn"
+              >
+                {isLoading ? '⏳ Processing...' : '▶️ Start Recording'}
+              </button>
+            ) : (
+              <button 
+                onClick={handleStopRecording}
+                className="debate-stop-btn"
+              >
+                ⏹️ Stop Recording
+              </button>
+            )}
+          </div>
+
+          {isRecording && (
+            <div className="recording-status">
+              <p>🎙️ Recording in progress... Speak your argument</p>
+              {liveTranscription && (
+                <div className="live-transcription">
+                  <p>{liveTranscription}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {transcription && (
+            <div className="debate-transcript">
+              <div className="transcript-bubble user-bubble">
+                <p className="bubble-label">Your Argument</p>
+                <p>{transcription}</p>
+              </div>
+            </div>
+          )}
+
+          {rebuttal && (
+            <div className="debate-transcript">
+              <div className="transcript-bubble ai-bubble">
+                <p className="bubble-label">AI Response</p>
+                <p>{rebuttal}</p>
+              </div>
+              <div className="audio-controls">
+                <button onClick={() => speakText(rebuttal)} disabled={isSpeaking && !isPaused}>
+                  {isSpeaking && !isPaused ? '🔊 Speaking...' : '🔊 Play'}
+                </button>
+                <button onClick={pauseSpeech} disabled={!isSpeaking || isPaused}>⏸️ Pause</button>
+                <button onClick={resumeSpeech} disabled={!isPaused}>▶️ Resume</button>
+                <button onClick={stopSpeech} disabled={!isSpeaking && !isPaused}>⏹️ Stop</button>
+              </div>
+            </div>
+          )}
+
+          {analysis && (
+            <div className="analysis-section">
+              <h3>Debate Analysis</h3>
+              <div className="analysis-content">
+                {parseAnalysis(analysis)}
+              </div>
             </div>
           )}
         </div>
-      )}
+          )}
 
-      {transcription && (
-        <div className="debate-section">
-          <h2>Your Argument</h2>
-          <p>{transcription}</p>
-        </div>
-      )}
+          {currentPage === 'history' && (
+            <div className="history-page">
+              <h2>Debate History</h2>
+              {showHistory && (
+                <div className="history-list">
+                  {searchHistory.length === 0 ? (
+                    <p>No debates yet.</p>
+                  ) : (
+                    searchHistory.map((item: any) => (
+                      <div key={item.id} className="history-card">
+                        <h3>{item.topic}</h3>
+                        <p><strong>Your Argument:</strong> {item.transcription}</p>
+                        <p><strong>AI Response:</strong> {item.rebuttal}</p>
+                        <small>{new Date(item.created_at).toLocaleString()}</small>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-      {rebuttal && (
-        <div className="debate-section">
-          <h2> Debatable's Response</h2>
-          <p>{rebuttal}</p>
-          <div className="audio-controls">
-            <button 
-              onClick={() => speakText(rebuttal)}
-              disabled={isSpeaking && !isPaused}
-              className={isSpeaking && !isPaused ? 'speaking' : ''}
-            >
-              {isSpeaking && !isPaused ? 'Speaking...' : 'Play Response'}
-            </button>
-            <button
-              onClick={pauseSpeech}
-              disabled={!isSpeaking || isPaused}
-            >
-              Pause
-            </button>
-            <button
-              onClick={resumeSpeech}
-              disabled={!isPaused}
-            >
-              Resume
-            </button>
-            <button
-              onClick={stopSpeech}
-              disabled={!isSpeaking && !isPaused}
-            >
-              Stop
-            </button>
-          </div>
-          <div className="volume-control">
-            <label htmlFor="volume">Volume: {Math.round(volume * 100)}%</label>
-            <input
-              id="volume"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={volume}
-              onChange={(e) => setVolume(Number(e.target.value))}
-            />
-          </div>
-        </div>
-      )}
+          {currentPage === 'analytics' && (
+            <div className="analytics-page">
+              <h2>Your Analytics</h2>
+              <p>Analytics coming soon...</p>
+            </div>
+          )}
 
-      {analysis && (
-        <div className="analysis-section">
-          <h2>Debate Analysis</h2>
-          <div className="analysis-content">
-            {parseAnalysis(analysis)}
-          </div>
+          {currentPage === 'settings' && (
+            <div className="settings-page">
+              <h2>Settings</h2>
+              <p>Settings coming soon...</p>
+            </div>
+          )}
         </div>
-      )}
+      </main>
     </div>
   );
 }
