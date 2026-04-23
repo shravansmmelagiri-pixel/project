@@ -27,12 +27,20 @@ function App() {
   const [equalizerActive, setEqualizerActive] = useState(false);
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'debate' | 'history' | 'analytics' | 'settings'>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [profileData, setProfileData] = useState({ username: '', email: '', avatar: '' });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [stats] = useState({
     totalDebates: 48,
     winRate: 72,
     averageScore: 8.3,
     weakAreas: 'Logic Structure'
   });
+  // Multi-round debate state
+  const [debateRounds, setDebateRounds] = useState<{roundNum: number; userArg: string; aiResponse: string; analysis: string}[]>([]);
+  const [debateActive, setDebateActive] = useState(false);
+  const [debateSessionEnded, setDebateSessionEnded] = useState(false);
+  const [currentRound, setCurrentRound] = useState(0);
+  const debateChatRef = useRef<HTMLDivElement>(null);
   const synth = window.speechSynthesis;
 
   // Check if user is logged in on app load
@@ -89,7 +97,8 @@ function App() {
       const recognition = new (window as any).webkitSpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      
+      recognition.lang = 'en-US';  // ← always English
+
       recognition.onresult = (event: any) => {
         const transcript = Array.from(event.results)
           .map((result: any) => result[0])
@@ -157,13 +166,14 @@ function App() {
   const loadSearchHistory = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;  // not logged in, skip silently
       const response = await axios.get('http://localhost:8000/history', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSearchHistory(response.data);
       setShowHistory(true);
     } catch (error) {
-      alert('Failed to load search history');
+      console.warn('Could not load history:', error);  // silent — no alert
     }
   };
 
@@ -387,13 +397,28 @@ function App() {
     }
   };
 
+  // End the entire debate session
+  const handleStopDebateSession = () => {
+    handleStopRecording();
+    setDebateActive(false);
+    setDebateSessionEnded(true);
+  };
+
   //start recording 
-  const handleStartRecording = async () => {
+  const handleStartRecording = async (isNewSession = false) => {
     if (!topic) {
       alert("Please enter a debate topic.");
       return;
     }
 
+    if (isNewSession) {
+      // Fresh session: reset everything
+      setDebateRounds([]);
+      setCurrentRound(0);
+      setDebateSessionEnded(false);
+    }
+
+    setDebateActive(true);
     setIsRecording(true);
     setIsLoading(false);
     setTranscription('');
@@ -454,8 +479,26 @@ function App() {
           setRebuttal(response.data.rebuttal);
           setAnalysis(response.data.analysis);
 
+          // Push this exchange as a new round
+          const roundNum = currentRound + 1;
+          setCurrentRound(roundNum);
+          setDebateRounds(prev => [...prev, {
+            roundNum,
+            userArg: response.data.transcription,
+            aiResponse: response.data.rebuttal,
+            analysis: response.data.analysis,
+          }]);
+
+          // Scroll chat to bottom
+          setTimeout(() => {
+            debateChatRef.current?.scrollTo({ top: debateChatRef.current.scrollHeight, behavior: 'smooth' });
+          }, 100);
+
           // Speak the rebuttal
           speakText(response.data.rebuttal);
+
+          // Refresh history so Analytics updates immediately
+          if (isLoggedIn) loadSearchHistory();
         } catch (error: any) {
           console.error('Error:', error);
           if (error.response) {
@@ -601,7 +644,7 @@ function App() {
     <div className="dashboard-container">
       <div className="dashboard-header">
         <h1 className="dashboard-title">Dashboard</h1>
-        <p className="dashboard-subtitle">Welcome back, {currentUser?.username}!</p>
+        <p className="dashboard-subtitle">Welcome back, {currentUser?.username}! 👋</p>
       </div>
 
       <div className="stats-grid">
@@ -609,71 +652,98 @@ function App() {
           <div className="stat-icon">📊</div>
           <div className="stat-content">
             <p className="stat-label">Total Debates</p>
-            <p className="stat-value">{stats.totalDebates}</p>
+            <p className="stat-value">{stats.totalDebates === 0 ? '—' : stats.totalDebates}</p>
+            <p className="stat-sublabel">{stats.totalDebates === 0 ? 'No debates yet' : `Debate #${stats.totalDebates} completed`}</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">🎯</div>
           <div className="stat-content">
             <p className="stat-label">Win Rate</p>
-            <p className="stat-value">{stats.winRate}%</p>
+            <p className="stat-value">{stats.totalDebates === 0 ? '—' : `${stats.winRate}%`}</p>
+            <p className="stat-sublabel">{stats.totalDebates === 0 ? 'Start debating!' : 'Score ≥ 7.5'}</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">⭐</div>
           <div className="stat-content">
             <p className="stat-label">Avg Score</p>
-            <p className="stat-value">{stats.averageScore}/10</p>
+            <p className="stat-value">{stats.totalDebates === 0 ? '—' : `${stats.averageScore}/10`}</p>
+            <p className="stat-sublabel">{stats.totalDebates === 0 ? 'No data yet' : 'Across all debates'}</p>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon">⚠️</div>
+          <div className="stat-icon">🔥</div>
           <div className="stat-content">
-            <p className="stat-label">Weak Area</p>
-            <p className="stat-value">{stats.weakAreas}</p>
+            <p className="stat-label">With Arguments</p>
+            <p className="stat-value">{0}</p>
+            <p className="stat-sublabel">Substantive debates</p>
           </div>
         </div>
       </div>
 
       <div className="action-buttons-grid">
-        <button className="action-button primary" onClick={handleStartRecording}>
-          <span className="button-icon">▶️</span>
+        <button className="action-button primary" onClick={() => setCurrentPage('debate')}>
+          <span className="button-icon">🎙️</span>
           <span className="button-text">Start Debate</span>
         </button>
-        <button className="action-button secondary">
-          <span className="button-icon">🎓</span>
-          <span className="button-text">Practice Mode</span>
+        <button className="action-button secondary" onClick={() => { setCurrentPage('history'); loadSearchHistory(); }}>
+          <span className="button-icon">📜</span>
+          <span className="button-text">View History</span>
         </button>
-        <button className="action-button secondary">
-          <span className="button-icon">💡</span>
-          <span className="button-text">AI Feedback</span>
+        <button className="action-button secondary" onClick={() => { setCurrentPage('analytics'); loadSearchHistory(); }}>
+          <span className="button-icon">📈</span>
+          <span className="button-text">Analytics</span>
         </button>
       </div>
 
       <div className="recent-debates">
         <h2 className="section-title">Recent Debates</h2>
         <div className="debates-list">
-          <div className="debate-item">
-            <div className="debate-header">
-              <h3 className="debate-topic">Climate Change Policy</h3>
-              <span className="debate-date">2 days ago</span>
+          {searchHistory.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-icon">🎤</p>
+              <p className="empty-title">No debates yet</p>
+              <p className="empty-desc">Click "Start Debate" to begin your first debate session!</p>
             </div>
-            <div className="debate-stats">
-              <span className="debate-score">Score: 8.5/10</span>
-              <span className="debate-duration">Duration: 12m</span>
-            </div>
-          </div>
-          <div className="debate-item">
-            <div className="debate-header">
-              <h3 className="debate-topic">Technology Impact</h3>
-              <span className="debate-date">1 week ago</span>
-            </div>
-            <div className="debate-stats">
-              <span className="debate-score">Score: 7.8/10</span>
-              <span className="debate-duration">Duration: 10m</span>
+          ) : (
+            searchHistory.slice(0, 5).map((item: any, index: number) => (
+              <div key={item.id} className="debate-item">
+                <div className="debate-number">#{searchHistory.length - index}</div>
+                <div className="debate-item-main">
+                  <div className="debate-header">
+                    <h3 className="debate-topic">{item.topic}</h3>
+                    <span className="debate-date">
+                      {new Date(item.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="debate-stats">
+                    <span className={`debate-badge ${item.transcription && item.transcription.length > 10 ? 'badge-with-args' : 'badge-no-args'}`}>
+                      {item.transcription && item.transcription.length > 10 ? '✓ With Arguments' : '⚬ No Arguments'}
+                    </span>
+                    <span className="debate-time-badge">
+                      🕐 {new Date(item.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── Quick Argument Analyser ── */}
+      <div className="dash-analyser-section">
+        <div className="dash-analyser-header">
+          <div className="dash-analyser-title-row">
+            <span className="dash-analyser-icon">🔬</span>
+            <div>
+              <h2 className="dash-analyser-title">Quick Argument Analyser</h2>
+              <p className="dash-analyser-sub">Paste or type any argument to get instant scores, tone detection &amp; structured feedback</p>
             </div>
           </div>
         </div>
+        { /* analyser removed */ }
       </div>
     </div>
   );
@@ -700,11 +770,11 @@ function App() {
             <span className="nav-icon">🎙️</span>
             <span className="nav-text">Start Debate</span>
           </button>
-          <button className={`nav-item ${currentPage === 'history' ? 'active' : ''}`} onClick={() => setCurrentPage('history')}>
+          <button className={`nav-item ${currentPage === 'history' ? 'active' : ''}`} onClick={() => { setCurrentPage('history'); loadSearchHistory(); }}>
             <span className="nav-icon">📜</span>
             <span className="nav-text">History</span>
           </button>
-          <button className={`nav-item ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => setCurrentPage('analytics')}>
+          <button className={`nav-item ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => { setCurrentPage('analytics'); loadSearchHistory(); }}>
             <span className="nav-icon">📈</span>
             <span className="nav-text">Analytics</span>
           </button>
@@ -724,138 +794,476 @@ function App() {
           {currentPage === 'dashboard' && renderDashboard()}
           
           {currentPage === 'debate' && (
-        <div className="debate-section">
-          <div className="debate-top-bar">
-            <div className="debate-topic-display">{topic || 'Enter a debate topic'}</div>
-            <div className="debate-timer">12:34</div>
-          </div>
+          <div className="debate-section">
 
-          <div className="ai-avatar-section">
-            <div className="ai-avatar">
-              <div className="avatar-glow"></div>
-              <div className="avatar-core"></div>
-              <div className="hologram-flicker"></div>
-            </div>
-            <div className={`volume-equalizer ${equalizerActive ? 'active' : ''}`}>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-              <div className="eq-bar"></div>
-            </div>
-          </div>
-
-          <div className="debate-input-section">
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="Enter debate topic"
-              disabled={isRecording}
-              className="debate-topic-input"
-            />
-            {!isRecording ? (
-              <button 
-                onClick={handleStartRecording}
-                disabled={isLoading}
-                className="debate-start-btn"
-              >
-                {isLoading ? '⏳ Processing...' : '▶️ Start Recording'}
-              </button>
-            ) : (
-              <button 
-                onClick={handleStopRecording}
-                className="debate-stop-btn"
-              >
-                ⏹️ Stop Recording
-              </button>
-            )}
-          </div>
-
-          {isRecording && (
-            <div className="recording-status">
-              <p>🎙️ Recording in progress... Speak your argument</p>
-              {liveTranscription && (
-                <div className="live-transcription">
-                  <p>{liveTranscription}</p>
-                </div>
+            {/* ── Top bar: topic + round counter ── */}
+            <div className="debate-top-bar">
+              <div className="debate-topic-display">{topic || 'Enter a debate topic'}</div>
+              {debateActive && (
+                <div className="debate-round-badge">Round {currentRound + (isRecording || isLoading ? 1 : 0)}</div>
               )}
             </div>
-          )}
 
-          {transcription && (
-            <div className="debate-transcript">
-              <div className="transcript-bubble user-bubble">
-                <p className="bubble-label">Your Argument</p>
-                <p>{transcription}</p>
+            {/* ── AI Avatar ── */}
+            <div className="ai-avatar-section">
+              <div className="ai-avatar">
+                <div className="avatar-glow"></div>
+                <div className="avatar-core"></div>
+                <div className="hologram-flicker"></div>
+              </div>
+              <div className={`volume-equalizer ${equalizerActive ? 'active' : ''}`}>
+                {[...Array(8)].map((_, i) => <div key={i} className="eq-bar"></div>)}
               </div>
             </div>
-          )}
 
-          {rebuttal && (
-            <div className="debate-transcript">
-              <div className="transcript-bubble ai-bubble">
-                <p className="bubble-label">AI Response</p>
-                <p>{rebuttal}</p>
-              </div>
-              <div className="audio-controls">
-                <button onClick={() => speakText(rebuttal)} disabled={isSpeaking && !isPaused}>
-                  {isSpeaking && !isPaused ? '🔊 Speaking...' : '🔊 Play'}
+            {/* ── Topic input + Start Session (only before a session begins) ── */}
+            {!debateActive && !debateSessionEnded && (
+              <div className="debate-input-section">
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="Enter debate topic…"
+                  className="debate-topic-input"
+                />
+                <button
+                  onClick={() => handleStartRecording(true)}
+                  disabled={isLoading || !topic.trim()}
+                  className="debate-start-btn"
+                >
+                  {isLoading ? '⏳ Processing...' : '🎙️ Start Debate'}
                 </button>
-                <button onClick={pauseSpeech} disabled={!isSpeaking || isPaused}>⏸️ Pause</button>
-                <button onClick={resumeSpeech} disabled={!isPaused}>▶️ Resume</button>
-                <button onClick={stopSpeech} disabled={!isSpeaking && !isPaused}>⏹️ Stop</button>
               </div>
-            </div>
+            )}
+
+            {/* ── Multi-round chat scroll area ── */}
+            {debateRounds.length > 0 && (
+              <div className="debate-chat-scroll" ref={debateChatRef}>
+                {debateRounds.map((round) => (
+                  <div key={round.roundNum} className="debate-round-block">
+                    <div className="round-label">Round {round.roundNum}</div>
+
+                    {/* User bubble */}
+                    <div className="transcript-bubble user-bubble">
+                      <p className="bubble-label">🧑 Your Argument</p>
+                      <p>{round.userArg}</p>
+                    </div>
+
+                    {/* AI bubble */}
+                    <div className="transcript-bubble ai-bubble">
+                      <p className="bubble-label">🤖 AI Response</p>
+                      <p>{round.aiResponse}</p>
+                      <div className="audio-controls">
+                        <button onClick={() => speakText(round.aiResponse)} disabled={isSpeaking && !isPaused}>
+                          {isSpeaking && !isPaused ? '🔊 Speaking...' : '🔊 Play'}
+                        </button>
+                        <button onClick={pauseSpeech} disabled={!isSpeaking || isPaused}>⏸️ Pause</button>
+                        <button onClick={resumeSpeech} disabled={!isPaused}>▶️ Resume</button>
+                        <button onClick={stopSpeech} disabled={!isSpeaking && !isPaused}>⏹️ Stop</button>
+                      </div>
+                    </div>
+
+                    {/* Analysis (collapsed) */}
+                    {round.analysis && (
+                      <details className="round-analysis-details">
+                        <summary>📊 View Round {round.roundNum} Analysis</summary>
+                        <div className="analysis-content">{parseAnalysis(round.analysis)}</div>
+                      </details>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Recording status ── */}
+            {isRecording && (
+              <div className="recording-status">
+                <span className="rec-dot" />
+                <p>🎙️ Recording Round {currentRound + 1}… Speak your argument</p>
+                {liveTranscription && (
+                  <div className="live-transcription"><p>{liveTranscription}</p></div>
+                )}
+              </div>
+            )}
+
+            {/* ── Loading ── */}
+            {isLoading && (
+              <div className="recording-status">
+                <span className="rec-dot processing" />
+                <p>⏳ AI is thinking… processing Round {currentRound + 1}</p>
+              </div>
+            )}
+
+            {/* ── Continue / Stop controls (shown after each AI response, while session active) ── */}
+            {debateActive && !isRecording && !isLoading && debateRounds.length > 0 && !debateSessionEnded && (
+              <div className="debate-continue-bar">
+                {!isRecording ? (
+                  <button className="debate-continue-btn" onClick={() => handleStartRecording(false)}>
+                    🎙️ Continue Debate (Round {currentRound + 1})
+                  </button>
+                ) : null}
+                <button className="debate-stop-session-btn" onClick={handleStopDebateSession}>
+                  🛑 Stop Debate
+                </button>
+              </div>
+            )}
+
+            {/* ── Active recording: only show Stop Recording button ── */}
+            {debateActive && isRecording && (
+              <div className="debate-continue-bar">
+                <button className="debate-stop-btn" onClick={handleStopRecording}>
+                  ⏹️ Stop Recording
+                </button>
+                <button className="debate-stop-session-btn" onClick={handleStopDebateSession}>
+                  🛑 End Debate
+                </button>
+              </div>
+            )}
+
+            {/* ── Session ended summary ── */}
+            {debateSessionEnded && debateRounds.length > 0 && (
+              <div className="debate-summary-card">
+                <div className="summary-icon">🏆</div>
+                <h3>Debate Completed!</h3>
+                <p className="summary-meta">
+                  Topic: <strong>{topic}</strong> · {debateRounds.length} round{debateRounds.length > 1 ? 's' : ''} completed
+                </p>
+                <div className="summary-stats">
+                  <div className="summary-stat">
+                    <span className="summary-stat-val">{debateRounds.length}</span>
+                    <span className="summary-stat-label">Rounds</span>
+                  </div>
+                  <div className="summary-stat">
+                    <span className="summary-stat-val">
+                      {debateRounds.filter(r => r.userArg && r.userArg.length > 20).length}
+                    </span>
+                    <span className="summary-stat-label">Full Arguments</span>
+                  </div>
+                  <div className="summary-stat">
+                    <span className="summary-stat-val">
+                      {debateRounds.reduce((sum, r) => sum + r.userArg.split(' ').length, 0)}
+                    </span>
+                    <span className="summary-stat-label">Total Words</span>
+                  </div>
+                </div>
+                <div className="summary-actions">
+                  <button className="debate-start-btn" onClick={() => {
+                    setDebateSessionEnded(false);
+                    setDebateActive(false);
+                    setDebateRounds([]);
+                    setCurrentRound(0);
+                    setTopic('');
+                  }}>
+                    🎙️ Start New Debate
+                  </button>
+                  <button className="action-button secondary" onClick={() => { setCurrentPage('history'); loadSearchHistory(); }}>
+                    📜 View History
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
           )}
 
-          {analysis && (
-            <div className="analysis-section">
-              <h3>Debate Analysis</h3>
-              <div className="analysis-content">
-                {parseAnalysis(analysis)}
-              </div>
-            </div>
-          )}
-        </div>
-          )}
 
           {currentPage === 'history' && (
             <div className="history-page">
-              <h2>Debate History</h2>
-              {showHistory && (
-                <div className="history-list">
-                  {searchHistory.length === 0 ? (
-                    <p>No debates yet.</p>
-                  ) : (
-                    searchHistory.map((item: any) => (
+              <div className="page-header">
+                <h2>Debate History</h2>
+                <span className="history-count">{searchHistory.length} total debates</span>
+              </div>
+              <div className="history-list">
+                {searchHistory.length === 0 ? (
+                  <div className="empty-state">
+                    <p className="empty-icon">📜</p>
+                    <p className="empty-title">No history yet</p>
+                    <p className="empty-desc">Your debate sessions will appear here with full timestamps.</p>
+                  </div>
+                ) : (
+                  searchHistory.map((item: any, index: number) => {
+                    const dateObj = new Date(item.created_at);
+                    const hasArgs = item.transcription && item.transcription.length > 10;
+                    return (
                       <div key={item.id} className="history-card">
-                        <h3>{item.topic}</h3>
-                        <p><strong>Your Argument:</strong> {item.transcription}</p>
-                        <p><strong>AI Response:</strong> {item.rebuttal}</p>
-                        <small>{new Date(item.created_at).toLocaleString()}</small>
+                        <div className="history-card-header">
+                          <div className="history-card-left">
+                            <span className="history-debate-num">#{searchHistory.length - index}</span>
+                            <h3 className="history-topic">{item.topic}</h3>
+                          </div>
+                          <div className="history-card-right">
+                            <span className={`arg-badge ${hasArgs ? 'arg-badge--with' : 'arg-badge--without'}`}>
+                              {hasArgs ? '✓ With Arguments' : '⚬ No Arguments'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="history-datetime">
+                          <span className="history-date-icon">📅</span>
+                          <span className="history-date-text">
+                            {dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                          <span className="history-time-sep">•</span>
+                          <span className="history-time-icon">🕐</span>
+                          <span className="history-time-text">
+                            {dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                          </span>
+                        </div>
+                        {hasArgs && (
+                          <div className="history-body">
+                            <div className="history-arg">
+                              <p className="history-arg-label">Your Argument</p>
+                              <p className="history-arg-text">{item.transcription.length > 200 ? item.transcription.substring(0, 200) + '...' : item.transcription}</p>
+                            </div>
+                            {item.rebuttal && (
+                              <div className="history-rebuttal">
+                                <p className="history-arg-label">AI Rebuttal</p>
+                                <p className="history-arg-text">{item.rebuttal.length > 200 ? item.rebuttal.substring(0, 200) + '...' : item.rebuttal}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
+          {currentPage === 'analytics' && (() => {
+            // ── Live-computed analytics from searchHistory ──
+            const withArgs = searchHistory.filter((d: any) => d.transcription && d.transcription.trim().length > 10).length;
+            const total = searchHistory.length;
+            const withArgsPct = total > 0 ? Math.round((withArgs / total) * 100) : 0;
+            const avgLen = withArgs > 0
+              ? Math.round(searchHistory.filter((d: any) => d.transcription && d.transcription.trim().length > 10)
+                  .reduce((s: number, d: any) => s + d.transcription.length, 0) / withArgs)
+              : 0;
+            const avgScore = total > 0
+              ? Math.round((searchHistory.reduce((s: number, d: any) => s + (d.score || 0), 0) / total) * 10) / 10
+              : 0;
+            const topicMap: Record<string, number> = {};
+            searchHistory.forEach((d: any) => { if (d.topic) topicMap[d.topic] = (topicMap[d.topic] || 0) + 1; });
+            const topTopic = Object.keys(topicMap).sort((a, b) => topicMap[b] - topicMap[a])[0] || '—';
+            const engRate = total > 0 ? Math.round((withArgs / total) * 100) : 0;
 
-          {currentPage === 'analytics' && (
-            <div className="analytics-page">
-              <h2>Your Analytics</h2>
-              <p>Analytics coming soon...</p>
-            </div>
-          )}
+            // ── Extract weak points from analysis texts ──
+            const weakPoints: {topic: string; point: string}[] = [];
+            searchHistory.slice(0, 8).forEach((d: any) => {
+              if (!d.analysis) return;
+              const analysisText: string = d.analysis;
+              // grab sentences that contain weakness keywords
+              const sentences = analysisText.split(/[.!\n]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 20);
+              const weakSentences = sentences.filter((s: string) =>
+                /weak|improv|lack|miss|unclear|vague|avoid|fail|poor|limit|more evidence|not enough|unsupport/i.test(s)
+              );
+              weakSentences.slice(0, 2).forEach((pt: string) => {
+                weakPoints.push({ topic: d.topic || 'Debate', point: pt });
+              });
+            });
+
+            return (
+              <div className="analytics-page">
+                <div className="page-header">
+                  <h2>Your Analytics</h2>
+                  <span className="history-count">{total} debates analyzed</span>
+                </div>
+
+                {/* ── Top row: With Arguments + Feedback ── */}
+                <div className="analytics-overview">
+
+                  {/* Card 1: Debates WITH Arguments */}
+                  <div className="analytics-card analytics-card--primary">
+                    <div className="analytics-card-icon">&#x1F5E3;</div>
+                    <div className="analytics-card-body">
+                      <p className="analytics-card-label">Debates WITH Arguments</p>
+                      <p className="analytics-card-value">{withArgs}</p>
+                      <p className="analytics-card-desc">You actively argued your position</p>
+                    </div>
+                    <div className="analytics-progress-ring">
+                      <svg viewBox="0 0 60 60" width="60" height="60">
+                        <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(127,90,240,0.15)" strokeWidth="6"/>
+                        <circle
+                          cx="30" cy="30" r="24" fill="none" stroke="#7F5AF0" strokeWidth="6"
+                          strokeDasharray={`${(withArgsPct / 100) * 150.8} 150.8`}
+                          strokeLinecap="round" transform="rotate(-90 30 30)"
+                        />
+                      </svg>
+                      <span className="ring-pct">{withArgsPct}%</span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Feedback – Key Weak Points */}
+                  <div className="analytics-card analytics-card--feedback">
+                    <div className="analytics-card-icon">&#x26A0;</div>
+                    <div className="analytics-card-body" style={{flex:1}}>
+                      <p className="analytics-card-label">Feedback &mdash; Key Weak Points</p>
+                      {weakPoints.length === 0 ? (
+                        <p className="analytics-card-desc" style={{marginTop:'0.5rem'}}>
+                          {total === 0
+                            ? 'Complete a debate to see your weak points.'
+                            : 'No specific weak points detected yet — great work!'}
+                        </p>
+                      ) : (
+                        <ul className="weak-points-list">
+                          {weakPoints.slice(0, 5).map((wp, i) => (
+                            <li key={i} className="weak-point-item">
+                              <span className="weak-point-topic">{wp.topic}</span>
+                              <span className="weak-point-text">{wp.point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* ── Stats row ── */}
+                <div className="analytics-stats-row">
+                  <div className="analytics-stat-box">
+                    <p className="analytics-stat-label">Avg Argument Length</p>
+                    <p className="analytics-stat-val">{avgLen} <span>chars</span></p>
+                  </div>
+                  <div className="analytics-stat-box">
+                    <p className="analytics-stat-label">Average Score</p>
+                    <p className="analytics-stat-val">{avgScore} <span>/ 10</span></p>
+                  </div>
+                  <div className="analytics-stat-box">
+                    <p className="analytics-stat-label">Most Debated Topic</p>
+                    <p className="analytics-stat-val" style={{fontSize:'1rem'}}>{topTopic}</p>
+                  </div>
+                  <div className="analytics-stat-box">
+                    <p className="analytics-stat-label">Engagement Rate</p>
+                    <p className="analytics-stat-val">{engRate}<span>%</span></p>
+                  </div>
+                </div>
+
+                {total === 0 && (
+                  <div className="empty-state" style={{marginTop:'2rem'}}>
+                    <p className="empty-icon">&#x1F4CA;</p>
+                    <p className="empty-title">No data yet</p>
+                    <p className="empty-desc">Complete at least one debate to see your analytics.</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {currentPage === 'settings' && (
             <div className="settings-page">
-              <h2>Settings</h2>
-              <p>Settings coming soon...</p>
+              <div className="page-header">
+                <h2>Settings</h2>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="settings-section-title">👤 Profile Information</h3>
+                <div className="profile-card">
+                  <div className="profile-avatar-wrapper">
+                    <div className="profile-avatar-circle">
+                      {(currentUser?.username || 'U')[0].toUpperCase()}
+                    </div>
+                    <div className="profile-avatar-glow"></div>
+                  </div>
+                  <div className="profile-info">
+                    {isEditingProfile ? (
+                      <div className="profile-edit-form">
+                        <div className="profile-field">
+                          <label>Username</label>
+                          <input
+                            type="text"
+                            value={profileData.username}
+                            onChange={e => setProfileData({...profileData, username: e.target.value})}
+                            className="profile-input"
+                          />
+                        </div>
+                        <div className="profile-field">
+                          <label>Email</label>
+                          <input
+                            type="email"
+                            value={profileData.email}
+                            onChange={e => setProfileData({...profileData, email: e.target.value})}
+                            className="profile-input"
+                            readOnly
+                          />
+                        </div>
+                        <div className="profile-edit-actions">
+                          <button
+                            className="profile-save-btn"
+                            onClick={() => setIsEditingProfile(false)}
+                          >
+                            ✓ Save Changes
+                          </button>
+                          <button
+                            className="profile-cancel-btn"
+                            onClick={() => {
+                              setProfileData({ username: currentUser?.username || '', email: currentUser?.email || '', avatar: '' });
+                              setIsEditingProfile(false);
+                            }}
+                          >
+                            ✕ Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="profile-view">
+                        <div className="profile-detail-row">
+                          <span className="profile-detail-label">Username</span>
+                          <span className="profile-detail-value">{profileData.username || currentUser?.username}</span>
+                        </div>
+                        <div className="profile-detail-row">
+                          <span className="profile-detail-label">Email</span>
+                          <span className="profile-detail-value">{profileData.email || currentUser?.email}</span>
+                        </div>
+                        <div className="profile-detail-row">
+                          <span className="profile-detail-label">Member Since</span>
+                          <span className="profile-detail-value">
+                            {currentUser?.created_at ? new Date(currentUser.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+                          </span>
+                        </div>
+                        <div className="profile-detail-row">
+                          <span className="profile-detail-label">Total Debates</span>
+                          <span className="profile-detail-value highlight">{stats.totalDebates}</span>
+                        </div>
+                        <button
+                          className="profile-edit-btn"
+                          onClick={() => setIsEditingProfile(true)}
+                        >
+                          ✏️ Edit Profile
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="settings-section-title">🏆 Performance Summary</h3>
+                <div className="settings-stats-grid">
+                  <div className="settings-stat">
+                    <p className="settings-stat-label">Total Debates</p>
+                    <p className="settings-stat-val">{stats.totalDebates}</p>
+                  </div>
+                  <div className="settings-stat">
+                    <p className="settings-stat-label">Win Rate</p>
+                    <p className="settings-stat-val">{stats.winRate}%</p>
+                  </div>
+                  <div className="settings-stat">
+                    <p className="settings-stat-label">Avg Score</p>
+                    <p className="settings-stat-val">{stats.averageScore}/10</p>
+                  </div>
+                  <div className="settings-stat">
+                    <p className="settings-stat-label">With Arguments</p>
+                    <p className="settings-stat-val">{0}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="settings-section-title">🚪 Account</h3>
+                <button className="settings-logout-btn" onClick={handleLogout}>
+                  Sign Out
+                </button>
+              </div>
             </div>
           )}
         </div>
