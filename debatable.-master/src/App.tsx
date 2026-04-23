@@ -15,8 +15,7 @@ function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [showLogin, setShowLogin] = useState(false);
-  const [showRegister, setShowRegister] = useState(false);
+  const [authMode, setAuthMode] = useState<'register' | 'login'>('register');
   const [showHistory, setShowHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState([]);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -83,7 +82,6 @@ function App() {
       
       setCurrentUser(userResponse.data);
       setIsLoggedIn(true);
-      setShowLogin(false);
       setLoginForm({ username: '', password: '' });
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Login failed');
@@ -104,7 +102,6 @@ function App() {
       
       setCurrentUser(userResponse.data);
       setIsLoggedIn(true);
-      setShowRegister(false);
       setRegisterForm({ email: '', username: '', password: '' });
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Registration failed');
@@ -445,89 +442,107 @@ function App() {
   };
 
   //ui
+  if (!isLoggedIn) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-side-panel">
+            <div className="auth-brand">
+              <span className="logo">AI DEBATE COACH</span>
+            </div>
+            <div className="auth-hero-copy">
+              <h2>Sharpen your arguments.</h2>
+              <p>Practice smarter debates, get instant AI feedback, and build confidence in every conversation.</p>
+            </div>
+            <div className="auth-footer-copy">
+              <p>Build your debate skills with real-time coaching and guided improvement.</p>
+            </div>
+          </div>
+
+          <div className="auth-form-panel">
+            <div className="auth-panel-header">
+              <div>
+                <h1>{authMode === 'register' ? 'Create an account' : 'Welcome back'}</h1>
+                <p>{authMode === 'register' ? 'Get started with your AI Debate Coach.' : 'Log in to continue your practice.'}</p>
+              </div>
+            </div>
+            <div className="auth-toggle">
+              <button className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')} type="button">Create account</button>
+              <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')} type="button">Log in</button>
+            </div>
+
+            {authMode === 'register' ? (
+              <form className="auth-form" onSubmit={handleRegister}>
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={registerForm.username}
+                  onChange={e => setRegisterForm({...registerForm, username: e.target.value})}
+                  required
+                />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={registerForm.email}
+                  onChange={e => setRegisterForm({...registerForm, email: e.target.value})}
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Enter your password"
+                  value={registerForm.password}
+                  onChange={e => setRegisterForm({...registerForm, password: e.target.value})}
+                  required
+                />
+                <button type="submit" className="auth-submit">Create account</button>
+                <p className="auth-switch-text">Already have an account? <button type="button" className="link-button" onClick={() => setAuthMode('login')}>Log in</button></p>
+              </form>
+            ) : (
+              <form className="auth-form" onSubmit={handleLogin}>
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={loginForm.username}
+                  onChange={e => setLoginForm({...loginForm, username: e.target.value})}
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Enter your password"
+                  value={loginForm.password}
+                  onChange={e => setLoginForm({...loginForm, password: e.target.value})}
+                  required
+                />
+                <button type="submit" className="auth-submit">Login</button>
+                <p className="auth-switch-text">New here? <button type="button" className="link-button" onClick={() => setAuthMode('register')}>Create account</button></p>
+              </form>
+            )}
+
+            <div className="auth-divider">Or register with</div>
+            <div className="auth-social-buttons">
+              <button type="button" className="social-button google">Google</button>
+              <button type="button" className="social-button apple">Apple</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="App">
-      <h1> Debatable. </h1>
+      <h1>AI DEBATE COACH</h1>
       <h3>The AI Powered Debate Assistant.</h3>
 
       {/* Authentication Section */}
       <div className="auth-section">
-        {isLoggedIn ? (
-          <div className="user-info">
-            <span>Welcome, {currentUser?.username}!</span>
-            <button onClick={loadSearchHistory}>View History</button>
-            <button onClick={handleLogout}>Logout</button>
-          </div>
-        ) : (
-          <div className="auth-buttons">
-            <button onClick={() => setShowLogin(true)}>Login</button>
-            <button onClick={() => setShowRegister(true)}>Register</button>
-          </div>
-        )}
+        <div className="user-info">
+          <span>Welcome, {currentUser?.username}!</span>
+          <button onClick={loadSearchHistory}>View History</button>
+          <button onClick={handleLogout}>Logout</button>
+        </div>
       </div>
 
-      {/* Login Modal */}
-      {showLogin && (
-        <div className="modal-overlay" onClick={() => setShowLogin(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Login</h2>
-            <form onSubmit={handleLogin}>
-              <input
-                type="text"
-                placeholder="Username"
-                value={loginForm.username}
-                onChange={e => setLoginForm({...loginForm, username: e.target.value})}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={loginForm.password}
-                onChange={e => setLoginForm({...loginForm, password: e.target.value})}
-                required
-              />
-              <button type="submit">Login</button>
-              <button type="button" onClick={() => setShowLogin(false)}>Cancel</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Register Modal */}
-      {showRegister && (
-        <div className="modal-overlay" onClick={() => setShowRegister(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Register</h2>
-            <form onSubmit={handleRegister}>
-              <input
-                type="email"
-                placeholder="Email"
-                value={registerForm.email}
-                onChange={e => setRegisterForm({...registerForm, email: e.target.value})}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Username"
-                value={registerForm.username}
-                onChange={e => setRegisterForm({...registerForm, username: e.target.value})}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={registerForm.password}
-                onChange={e => setRegisterForm({...registerForm, password: e.target.value})}
-                required
-              />
-              <button type="submit">Register</button>
-              <button type="button" onClick={() => setShowRegister(false)}>Cancel</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* History Modal */}
       {showHistory && (
         <div className="modal-overlay" onClick={() => setShowHistory(false)}>
           <div className="modal history-modal" onClick={e => e.stopPropagation()}>
